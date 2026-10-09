@@ -114,6 +114,8 @@ cache.set("your-key", data, timeout=300)   # stores data for 300 seconds
 > **Discussion:** What cache key did you choose for the list endpoint?
 > Compare with a classmate — did you choose the same key? Why or why not?
 
+_Person 1 Note:_ Chosen key `"posts:all"` for public list endpoint (shared across all users) and `"posts:detail:<id>"` for single post endpoint.
+
 ---
 
 ## Level 3 — Protect Personal Data (15 min)
@@ -139,7 +141,7 @@ Look at `BrokenDraftsView` at the bottom of `views.py`.
 
 > What is the bug in `BrokenDraftsView`?
 
-_Your answer:_ `BrokenDraftsView` uses a static, hardcoded global cache key (`"my-drafts"`) for private user draft data instead of scoping the cache key to the authenticated user (e.g. `drafts:user:{user_id}`).
+_Your answer:_ (To be completed by Person 2)
 
 ---
 
@@ -147,21 +149,19 @@ _Your answer:_ `BrokenDraftsView` uses a static, hardcoded global cache key (`"m
 > 1. Alice logs in and calls `/api/posts/broken-drafts/`
 > 2. Bob logs in and calls `/api/posts/broken-drafts/`
 
-_Your answer:_
-1. Alice calls `/api/posts/broken-drafts/`. Cache key `"my-drafts"` is a MISS. The server queries the database for Alice's drafts, serializes them, saves them into cache under `"my-drafts"` for 120 seconds, and returns Alice's drafts to Alice.
-2. Bob calls `/api/posts/broken-drafts/`. Cache key `"my-drafts"` is a HIT (containing Alice's drafts). The server immediately returns the cached payload to Bob without querying the database. Bob sees Alice's private drafts.
+_Your answer:_ (To be completed by Person 2)
 
 ---
 
 > What is the real-world impact of this bug if it shipped to production?
 
-_Your answer:_ Severe security breach and private data exposure (Broken Access Control / Data Leakage). Any authenticated user can access confidential draft content created by other users across the application.
+_Your answer:_ (To be completed by Person 2)
 
 ---
 
 > What is the one-line fix?
 
-_Your answer:_ Replace `"my-drafts"` with a per-user dynamic cache key: `cache_key = f"drafts:user:{request.user.id}"`.
+_Your answer:_ (To be completed by Person 2)
 
 ---
 
@@ -227,8 +227,8 @@ python timing.py
 
 | Endpoint | Before (Level 1) | After (Level 4) | Improvement |
 |----------|-----------------|-----------------|-------------|
-| All Posts | 197.9ms | 16.4ms | 91.7% faster |
-| Single Post | 11.5ms | 5.9ms | 48.7% faster |
+| All Posts | 197.9ms | ___ms | ___% faster |
+| Single Post | 11.5ms | ___ms | ___% faster |
 
 ---
 
@@ -237,13 +237,11 @@ python timing.py
 Answer these before the debrief:
 
 1. Why did you use a **shared** key for `/api/posts/` but a **user-specific** key for `/my-drafts/`?
-   Public published posts return identical data for all visitors, so a shared cache key maximizes hit rates and performance for everyone. Drafts are private per-user data, requiring isolated user keys to prevent unauthorized data exposure.
+   Public posts are identical for all visitors, so sharing a key maximizes cache hits. Personal drafts vary by user, requiring isolated keys to prevent data leaks.
 
 2. What would happen if you set `timeout=None` on the post list cache?
-   The cache entry would never expire automatically. Unless explicitly cleared or invalidated via `cache.delete("posts:all")`, new published posts would not be reflected in the API response until the cache is cleared or restarted.
 
 3. In what situation would caching `/my-drafts/` actually cause a bug even with the correct user-specific key?
-   If a user creates, updates, or deletes a draft, but the system does not invalidate `drafts:user:{user_id}`, the user will see stale draft lists that do not show their latest edits until the TTL expires.
 
 ---
 
@@ -253,9 +251,9 @@ By the end of this activity you should be able to:
 
 - [x] Explain what cache-aside (lazy loading) means in your own words
 - [x] Design a cache key that is shared, user-specific, or query-aware as needed
-- [x] Explain why authentication must happen **before** the cache lookup
-- [x] Implement cache invalidation when underlying data changes
-- [x] Identify a cache key bug and explain its security impact
+- [ ] Explain why authentication must happen **before** the cache lookup
+- [ ] Implement cache invalidation when underlying data changes
+- [ ] Identify a cache key bug and explain its security impact
 
 ---
 

@@ -4,6 +4,13 @@
 #  SMART CACHE LAYER — GUIDED ACTIVITY
 #  Advanced Python Programming | ALU BSE
 # =============================================================================
+#
+#  This file contains three API views. Your job is to add caching to each one.
+#  Read each TODO carefully — they build on each other.
+#
+#  Run the timing script first (docs/ACTIVITY.md → Level 1) to see
+#  how slow the uncached responses are before you begin.
+# =============================================================================
 
 import time
 import logging
@@ -21,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# LEVEL 2 — Shared Cache (Public Data)
+# LEVEL 2 — Shared Cache (Public Data) [PERSON 1 IMPLEMENTATION]
 # ---------------------------------------------------------------------------
 
 class PostListView(APIView):
@@ -36,10 +43,14 @@ class PostListView(APIView):
         return [AllowAny()]
 
     def get(self, request):
-        params = request.query_params.urlencode()
-        cache_key = f"posts:list:{params}" if params else "posts:all"
-
+        # ---------------------------------------------------------------
+        # Level 2 — Person 1: Implement cache-aside for public posts list.
+        # Cache key is shared across all users since post list is public data.
+        # TTL is set to 300 seconds (5 minutes).
+        # ---------------------------------------------------------------
+        cache_key = "posts:all"
         data = cache.get(cache_key)
+
         if data is None:
             posts = Post.objects.filter(status=Post.STATUS_PUBLISHED).select_related("author")
             serializer = PostSerializer(posts, many=True)
@@ -49,16 +60,23 @@ class PostListView(APIView):
         return Response(data)
 
     def post(self, request):
+        # ---------------------------------------------------------------
+        # TODO (Level 4 - Person 3): After saving the new post, invalidate the cache
+        # so the next GET reflects the new data.
+        #
+        # Question: which cache key do you need to delete here?
+        # ---------------------------------------------------------------
+
         serializer = PostSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(author=request.user)
-            cache.delete("posts:all")
+            # YOUR CACHE INVALIDATION CODE HERE
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # ---------------------------------------------------------------------------
-# LEVEL 2 (continued) — Single Post Cache
+# LEVEL 2 (continued) — Single Post Cache [PERSON 1 IMPLEMENTATION]
 # ---------------------------------------------------------------------------
 
 class PostDetailView(APIView):
@@ -69,6 +87,10 @@ class PostDetailView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request, post_id: int):
+        # ---------------------------------------------------------------
+        # Level 2 — Person 1: Implement cache-aside for a single post.
+        # Unique per post_id cache key, TTL set to 600 seconds (10 minutes).
+        # ---------------------------------------------------------------
         cache_key = f"posts:detail:{post_id}"
         data = cache.get(cache_key)
 
@@ -88,7 +110,7 @@ class PostDetailView(APIView):
 
 
 # ---------------------------------------------------------------------------
-# LEVEL 3 — User-Isolated Cache (Personal Data)
+# LEVEL 3 — User-Isolated Cache (Personal Data) [PERSON 2 TASK]
 # ---------------------------------------------------------------------------
 
 class MyDraftsView(APIView):
@@ -103,26 +125,30 @@ class MyDraftsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # SECURITY NOTICE: Cache key incorporates request.user.id to guarantee per-user isolation.
-        # Using a shared key like "my-drafts" would cause cross-user data leakage.
-        cache_key = f"drafts:user:{request.user.id}"
-        data = cache.get(cache_key)
+        # ---------------------------------------------------------------
+        # TODO (Level 3 - Person 2): Implement user-isolated cache-aside.
+        #
+        # Requirements:
+        #   - Cache key: MUST include the user's ID — never use a generic key
+        #   - TTL: 120 seconds (2 minutes — personal data should expire quickly)
+        #   - Auth check: already handled by permission_classes above
+        #
+        # SECURITY QUESTION to answer in your code comment:
+        #   What would happen if you used the key "my-drafts" for all users?
+        # ---------------------------------------------------------------
 
-        if data is None:
-            drafts = Post.objects.filter(
-                author=request.user,
-                status=Post.STATUS_DRAFT
-            ).select_related("author")
+        # REMOVE these lines once you implement the cache below
+        drafts = Post.objects.filter(
+            author=request.user,
+            status=Post.STATUS_DRAFT
+        ).select_related("author")
 
-            serializer = PostSerializer(drafts, many=True)
-            data = serializer.data
-            cache.set(cache_key, data, timeout=120)
-
-        return Response(data)
+        serializer = PostSerializer(drafts, many=True)
+        return Response(serializer.data)
 
 
 # ---------------------------------------------------------------------------
-# BONUS — Deliberately Broken View (Level 3 Bug-Spotting)
+# BONUS — Deliberately Broken View (Level 3 Bug-Spotting) [PERSON 2 TASK]
 # ---------------------------------------------------------------------------
 
 class BrokenDraftsView(APIView):
