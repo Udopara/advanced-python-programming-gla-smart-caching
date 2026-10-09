@@ -14,6 +14,7 @@
 
 import time
 import logging
+import uuid
 
 from django.core.cache import cache
 from rest_framework.views import APIView
@@ -45,10 +46,14 @@ class PostListView(APIView):
     def get(self, request):
         # ---------------------------------------------------------------
         # Level 2 — Person 1: Implement cache-aside for public posts list.
-        # Cache key is shared across all users since post list is public data.
-        # TTL is set to 300 seconds (5 minutes).
+        # Cache entries are shared across users, vary by query parameters, and
+        # expire after 300 seconds (5 minutes).
         # ---------------------------------------------------------------
-        cache_key = "posts:all"
+        # Keep each query variant in its own entry. The generation token lets POST
+        # invalidate all list variants together without clearing other cached data.
+        params = request.query_params.urlencode()
+        generation = cache.get("posts:list:generation", "initial")
+        cache_key = f"posts:list:{generation}:{params}"
         data = cache.get(cache_key)
 
         if data is None:
@@ -61,16 +66,11 @@ class PostListView(APIView):
 
     def post(self, request):
         # ---------------------------------------------------------------
-        # TODO (Level 4 - Person 3): After saving the new post, invalidate the cache
-        # so the next GET reflects the new data.
-        #
-        # Question: which cache key do you need to delete here?
-        # ---------------------------------------------------------------
-
         serializer = PostSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save(author=request.user)
-            # YOUR CACHE INVALIDATION CODE HERE
+            # Rotate the namespace so all cached list query variants go stale.
+            cache.set("posts:list:generation", uuid.uuid4().hex)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

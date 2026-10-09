@@ -114,7 +114,7 @@ cache.set("your-key", data, timeout=300)   # stores data for 300 seconds
 > **Discussion:** What cache key did you choose for the list endpoint?
 > Compare with a classmate — did you choose the same key? Why or why not?
 
-_Person 1 Note:_ Chosen key `"posts:all"` for public list endpoint (shared across all users) and `"posts:detail:<id>"` for single post endpoint.
+_Person 1 Note:_ The original public list key was `"posts:all"`, shared across users; the Person 3 stretch implementation adds the query string and an invalidation generation. The detail endpoint uses `"posts:detail:<id>"`.
 
 ---
 
@@ -153,7 +153,7 @@ Fix: Include the user’s ID in the cache key and query drafts belonging to that
 
 1. Alice calls the endpoint. The view queries Alice’s drafts and stores them in the cache under the shared key "my-drafts".
 2. Bob calls the same endpoint before that cache entry expires. The view finds Alice’s data under "my-drafts" and returns it without querying for Bob’s drafts.
-3. Bob can see Alice’s private drafts. MyDraftsView avoids this by using a cache key containing the logged-in user’s ID.s
+3. Bob can see Alice’s private drafts. MyDraftsView avoids this by using a cache key containing the logged-in user’s ID.
 ---
 
 > What is the real-world impact of this bug if it shipped to production?
@@ -181,8 +181,7 @@ The cache doesn't know the data changed.
 
 ### Your task
 
-Find the `post()` method in `PostListView` and add the one line of code
-that fixes this problem after a new post is saved.
+Find the `post()` method in `PostListView` and invalidate the list cache after a new post is saved. The implementation rotates a list-cache generation token; this invalidates every query-specific list entry together.
 
 ```python
 cache.delete("your-key-here")   # removes the stale entry
@@ -195,6 +194,8 @@ cache.delete("your-key-here")   # removes the stale entry
 
 > **Discussion:** What's the difference between `cache.delete()` and
 > updating the cache with the new data directly? When would you choose each?
+
+Invalidating forces the next request to rebuild from the source of truth, which is simple and avoids duplicating write logic. Updating the cached value can avoid a later database read, but is more error-prone when a mutation affects several query variants or cached representations.
 
 ---
 
@@ -228,10 +229,12 @@ python timing.py
 
 **Record your final results:**
 
-| Endpoint | Before (Level 1) | After (Level 4) | Improvement |
-|----------|-----------------|-----------------|-------------|
-| All Posts | 197.9ms | ___ms | ___% faster |
-| Single Post | 11.5ms | ___ms | ___% faster |
+| Endpoint | Before (Level 1 average) | After (measured average) | Improvement |
+|----------|-------------------------:|-------------------------:|------------:|
+| All Posts | 164.8ms | 97.1ms | 41.1% faster |
+| Single Post | 11.4ms | 10.0ms | 12.3% faster |
+
+In the final timing run, the first requests took 257.8ms for All Posts and 16.5ms for Single Post. The measured averages were 97.1ms and 10.0ms, respectively.
 
 ---
 
@@ -243,8 +246,10 @@ Answer these before the debrief:
    Public posts are identical for all visitors, so sharing a key maximizes cache hits. Personal drafts vary by user, requiring isolated keys to prevent data leaks.
 
 2. What would happen if you set `timeout=None` on the post list cache?
+   The entry would not expire automatically. It could remain stale indefinitely unless every relevant write path invalidates it; a local-memory cache would also be cleared when its process restarts.
 
 3. In what situation would caching `/my-drafts/` actually cause a bug even with the correct user-specific key?
+   If draft changes do not invalidate that user's key, the user can see stale drafts after creating, editing, deleting, or publishing one. A per-user key prevents cross-user leakage but does not keep that user's cached data fresh.
 
 ---
 
@@ -254,9 +259,11 @@ By the end of this activity you should be able to:
 
 - [x] Explain what cache-aside (lazy loading) means in your own words
 - [x] Design a cache key that is shared, user-specific, or query-aware as needed
-- [ ] Explain why authentication must happen **before** the cache lookup
-- [ ] Implement cache invalidation when underlying data changes
-- [ ] Identify a cache key bug and explain its security impact
+- [x] Explain why authentication must happen **before** the cache lookup
+- [x] Implement cache invalidation when underlying data changes
+- [x] Identify a cache key bug and explain its security impact
+
+`IsAuthenticated` is checked by Django REST Framework before `MyDraftsView.get()` runs, so an unauthenticated request cannot reach the cache lookup. Authentication must happen first because cache hits can return private data without querying the database, where ownership filtering might otherwise be applied.
 
 ---
 
