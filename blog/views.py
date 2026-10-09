@@ -125,26 +125,22 @@ class MyDraftsView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        # ---------------------------------------------------------------
-        # TODO (Level 3 - Person 2): Implement user-isolated cache-aside.
-        #
-        # Requirements:
-        #   - Cache key: MUST include the user's ID — never use a generic key
-        #   - TTL: 120 seconds (2 minutes — personal data should expire quickly)
-        #   - Auth check: already handled by permission_classes above
-        #
-        # SECURITY QUESTION to answer in your code comment:
-        #   What would happen if you used the key "my-drafts" for all users?
-        # ---------------------------------------------------------------
+              # Include the user ID so each person's private drafts use a separate key.
+        # A shared "my-drafts" key could return one user's drafts to another.
+        cache_key = f"my-drafts:user:{request.user.id}"
 
-        # REMOVE these lines once you implement the cache below
-        drafts = Post.objects.filter(
-            author=request.user,
-            status=Post.STATUS_DRAFT
-        ).select_related("author")
+        data = cache.get(cache_key)
+        if data is None:
+            drafts = Post.objects.filter(
+                author=request.user,
+                status=Post.STATUS_DRAFT
+            ).select_related("author")
 
-        serializer = PostSerializer(drafts, many=True)
-        return Response(serializer.data)
+            serializer = PostSerializer(drafts, many=True)
+            data = serializer.data
+            cache.set(cache_key, data, timeout=120)
+
+        return Response(data)
 
 
 # ---------------------------------------------------------------------------

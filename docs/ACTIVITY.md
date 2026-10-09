@@ -141,7 +141,9 @@ Look at `BrokenDraftsView` at the bottom of `views.py`.
 
 > What is the bug in `BrokenDraftsView`?
 
-_Your answer:_ (To be completed by Person 2)
+Bug: BrokenDraftsView uses the same cache key, "my-drafts", for every user.
+Impact: One user’s request can cache their private drafts, and another user may then receive those drafts from the shared cache.
+Fix: Include the user’s ID in the cache key and query drafts belonging to that user. MyDraftsView now uses a user-specific key.
 
 ---
 
@@ -149,19 +151,20 @@ _Your answer:_ (To be completed by Person 2)
 > 1. Alice logs in and calls `/api/posts/broken-drafts/`
 > 2. Bob logs in and calls `/api/posts/broken-drafts/`
 
-_Your answer:_ (To be completed by Person 2)
-
+1. Alice calls the endpoint. The view queries Alice’s drafts and stores them in the cache under the shared key "my-drafts".
+2. Bob calls the same endpoint before that cache entry expires. The view finds Alice’s data under "my-drafts" and returns it without querying for Bob’s drafts.
+3. Bob can see Alice’s private drafts. MyDraftsView avoids this by using a cache key containing the logged-in user’s ID.s
 ---
 
 > What is the real-world impact of this bug if it shipped to production?
 
-_Your answer:_ (To be completed by Person 2)
+Private drafts could be exposed to other authenticated users. Depending on the data in the drafts, this could reveal confidential writing or personal information, causing a privacy breach and loss of user trust.
 
 ---
 
 > What is the one-line fix?
 
-_Your answer:_ (To be completed by Person 2)
+Include the authenticated user’s ID in the cache key, for example: f"my-drafts:user:{request.user.id}".
 
 ---
 
